@@ -9,8 +9,12 @@ import numpy as np
 import os
 from generator_model import Generator
 from discriminator_model import Discriminator
-from tdqm import tdqm
+from tqdm import tqdm
 import config
+from run_on_patches import split_image_crops
+from utils import gradient_penalty, save_checkpoint
+from vgg_loss import VGGLoss
+from torch.utils.tensorboard import SummaryWriter
 
 
 def train_fn(
@@ -28,15 +32,16 @@ def train_fn(
 ):
     loop = tqdm(loader, leave=True)
 
-    for idx, (low_res, high_res) in enumerate(loop):
-        high_res = high_res.to(config.DEVICE)
-        low_res = low_res.to(config.DEVICE)
+    for idx, (input_image, target_image) in enumerate(loop):
+        target_image = target_image.to(config.DEVICE)
+        input_image = input_image.to(config.DEVICE)
 
         with torch.cuda.amp.autocast():
-            fake = gen(low_res)
-            critic_real = disc(high_res)
+            fake = gen(input_image)
+            critic_real = disc(target_image)
             critic_fake = disc(fake.detach())
-            gp = gradient_penalty(disc, high_res, fake, device=config.DEVICE)
+            gp = gradient_penalty(disc, target_image,
+                                  fake, device=config.DEVICE)
             loss_critic = (
                 -(torch.mean(critic_real) - torch.mean(critic_fake))
                 + config.LAMBDA_GP * gp
@@ -49,9 +54,9 @@ def train_fn(
 
         # Train Generator: min log(1 - D(G(z))) <-> max log(D(G(z))
         with torch.cuda.amp.autocast():
-            l1_loss = 1e-2 * l1(fake, high_res)
+            l1_loss = 1e-2 * l1(fake, target_image)
             adversarial_loss = 5e-3 * -torch.mean(disc(fake))
-            loss_for_vgg = vgg_loss(fake, high_res)
+            loss_for_vgg = vgg_loss(fake, target_image)
             gen_loss = l1_loss + loss_for_vgg + adversarial_loss
 
         opt_gen.zero_grad()
@@ -59,11 +64,12 @@ def train_fn(
         g_scaler.step(opt_gen)
         g_scaler.update()
 
-        writer.add_scalar("Critic loss", loss_critic.item(), global_step=tb_step)
+        writer.add_scalar("Critic loss", loss_critic.item(),
+                          global_step=tb_step)
         tb_step += 1
 
         if idx % 100 == 0 and idx > 0:
-            plot_examples("test_images/", gen)
+            split_image_crops("/Users/ma107/Desktop/crawl", gen)
 
         loop.set_postfix(
             gp=gp.item(),
@@ -77,7 +83,7 @@ def train_fn(
 
 
 def main():
-    dataset = MyImageFolder(root_dir="data/")
+    dataset = WaterDataset(root_dir="/Users/ma107/Downloads/wm-nowm")
     loader = DataLoader(
         dataset,
         batch_size=config.BATCH_SIZE,
@@ -87,9 +93,10 @@ def main():
     )
     gen = Generator(in_channels=3).to(config.DEVICE)
     disc = Discriminator(in_channels=3).to(config.DEVICE)
-    initialize_weights(gen)
-    opt_gen = optim.Adam(gen.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
-    opt_disc = optim.Adam(disc.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
+    opt_gen = optim.Adam(
+        gen.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
+    opt_disc = optim.Adam(
+        disc.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
     writer = SummaryWriter("logs")
     tb_step = 0
     l1 = nn.L1Loss()
@@ -100,20 +107,19 @@ def main():
     g_scaler = torch.cuda.amp.GradScaler()
     d_scaler = torch.cuda.amp.GradScaler()
 
-    if config.LOAD_MODEL:
-        load_checkpoint(
-            config.CHECKPOINT_GEN,
-            gen,
-            opt_gen,
-            config.LEARNING_RATE,
-        )
-        load_checkpoint(
-            config.CHECKPOINT_DISC,
-            disc,
-            opt_disc,
-            config.LEARNING_RATE,
-        )
-
+    # if config.LOAD_MODEL:
+    #     load_checkpoint(
+    #         config.CHECKPOINT_GEN,
+    #         gen,
+    #         opt_gen,
+    #         config.LEARNING_RATE,
+    #     )
+    #     load_checkpoint(
+    #         config.CHECKPOINT_DISC,
+    #         disc,
+    #         opt_disc,
+    #         config.LEARNING_RATE,
+    #     )
 
     for epoch in range(config.NUM_EPOCHS):
         tb_step = train_fn(
@@ -136,20 +142,21 @@ def main():
 
 
 if __name__ == "__main__":
-    try_model = True
+    # try_model = True
 
-    if try_model:
-        # Will just use pretrained weights and run on images
-        # in test_images/ and save the ones to SR in saved/
-        gen = Generator(in_channels=3).to(config.DEVICE)
-        opt_gen = optim.Adam(gen.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
-        load_checkpoint(
-            config.CHECKPOINT_GEN,
-            gen,
-            opt_gen,
-            config.LEARNING_RATE,
-        )
-        plot_examples("test_images/", gen)
-    else:
-        # This will train from scratch
-        main()
+    # if try_model:
+    #     # Will just use pretrained weights and run on images
+    #     # in test_images/ and save the ones to SR in saved/
+    #     gen = Generator(in_channels=3).to(config.DEVICE)
+    #     opt_gen = optim.Adam(
+    #         gen.parameters(), lr=config.LEARNING_RATE, betas=(0.0, 0.9))
+    #     load_checkpoint(
+    #         config.CHECKPOINT_GEN,
+    #         gen,
+    #         opt_gen,
+    #         config.LEARNING_RATE,
+    #     )
+    #     plot_examples("test_images/", gen)
+    # else:
+    # This will train from scratch
+    main()

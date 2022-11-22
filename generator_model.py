@@ -7,9 +7,9 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, use_act=True, **kwargs, ):
         super().__init__()
         self.cnn = nn.Conv2d(in_channels, out_channels, **
-                             kwargs, bias=False, padding_more="reflection")
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.act = nn.Relu(inplace=True) if use_act else nn.Identity()
+                             kwargs, bias=False, padding_mode="reflect")
+        self.bn = nn.InstanceNorm2d(out_channels, affine=True)
+        self.act = nn.ReLU(inplace=True) if use_act else nn.Identity()
 
     def forward(self, x):
         return self.act(self.bn(self.cnn(x)))
@@ -17,6 +17,7 @@ class ConvBlock(nn.Module):
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels):
+        super().__init__()
         self.survival_prob = 0.8
         self.block1 = ConvBlock(
             in_channels,
@@ -49,13 +50,13 @@ class ResidualBlock(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=2, down=True, act="relu"):
+    def __init__(self, in_channels, out_channels, stride=2, act="relu"):
         super().__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, 3, stride,
                       1, bias=False, padding_mode="reflect"),
-            nn.BatchNorm2d(out_channels),
-            nn.Relu(inplace=True) if act == "relu" else nn.LeakyReLU(
+            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.ReLU(inplace=True) if act == "relu" else nn.LeakyReLU(
                 0.2, inplace=True)
         )
 
@@ -68,8 +69,8 @@ class Generator(nn.Module):
         super().__init__()
         self.initial_down = nn.Sequential(
             nn.Conv2d(in_channels, features, 7, 1, 3,
-                      bias=True, paddding_mode="reflect"),
-            nn.Relu(inplace=True),
+                      bias=True, padding_mode="reflect"),
+            nn.ReLU(inplace=True),
         )
         self.down1 = Block(features, features*2, act="relu")
 
@@ -87,23 +88,24 @@ class Generator(nn.Module):
             Block(features*2, features, stride=1, act="relu"),
             Block(features, features, stride=1, act="relu"),
             nn.Conv2d(features, in_channels, kernel_size=7,
-                      stride=1, padding=3, padding_mode="reflect")
+                      stride=1, padding=3, padding_mode="reflect"),
+            nn.Tanh(),
         )
 
     def forward(self, x):
         d1 = self.initial_down(x)
         d2 = self.down1(d1)
-        d3 = self.down1(d2)
-        d4 = self.down1(d3)
-        d5 = self.down1(d4)
+        d3 = self.down2(d2)
+        d4 = self.down3(d3)
+        d5 = self.down4(d4)
         residuals = self.residuals(d5) + d5
         up1 = self.up1(F.interpolate(
             residuals, scale_factor=2, mode="nearest"))
-        up2 = self.up1(F.interpolate(
+        up2 = self.up2(F.interpolate(
             torch.cat([up1, d4], dim=1), scale_factor=2, mode="nearest"))
-        up3 = self.up2(F.interpolate(
+        up3 = self.up3(F.interpolate(
             torch.cat([up2, d3], dim=1), scale_factor=2, mode="nearest"))
-        up4 = self.up3(F.interpolate(
+        up4 = self.up4(F.interpolate(
             torch.cat([up3, d2], dim=1), scale_factor=2, mode="nearest"))
 
         return self.final_conv(torch.cat([up4, d1], dim=1))
