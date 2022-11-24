@@ -7,9 +7,10 @@ class CNNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride):
         super().__init__()
         self.conv = nn.Sequential(
-            spectral_norm(nn.Conv2d(
-                in_channels, out_channels, 3, stride, 1, bias=False, padding_mode="reflect"
-            )),
+            nn.Conv2d(
+                in_channels, out_channels, 3, stride, padding=1, bias=False, padding_mode="reflect"
+            ),
+            nn.InstanceNorm2d(out_channels, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -38,7 +39,7 @@ class Discriminator(nn.Module):
         in_channels = features[0]
         for idx, feature in enumerate(features[1:]):
             layers.append(CNNBlock(in_channels, feature,
-                          stride=1 if idx == len(features) else 2))
+                          stride=1 if idx == len(features) - 2 else 2))
             in_channels = feature
 
         layers.append(nn.Sequential(
@@ -49,19 +50,20 @@ class Discriminator(nn.Module):
 
         self.model = nn.Sequential(*layers)
 
-    def foward(self, x, y):
+    def forward(self, x, y):
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)
 
 
-# def test():
-#     x = torch.randn((1, 3, 256, 256))
-#     y = torch.randn((1, 3, 256, 256))
-#     model = Discriminator()
-#     preds = model(x, y)
-#     print(preds.shape)
+def test():
+    x = torch.randn((1, 3, 256, 256))
+    y = torch.randn((1, 3, 256, 256))
+    model = Discriminator()
+    preds = model(x, y)
+    print(model)
+    print(preds.shape)
 
 
-# if __name__ == "__main__":
-#     test()
+if __name__ == "__main__":
+    test()
