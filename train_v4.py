@@ -18,13 +18,13 @@ def train_fn(loader, disc, gen, opt_gen, opt_disc, mse, bce, vgg_loss):
     loop = tqdm(loader, leave=True)
 
     for idx, (input_image, target_image) in enumerate(loop):
-        target_image = target_image.to(config.DEVICE)
-        input_image = input_image.to(config.DEVICE)
+        high_res = target_image.to(config.DEVICE)
+        low_res = input_image.to(config.DEVICE)
 
         # Train Discriminator: max log(D(x)) + log(1 - D(G(z)))
-        fake = gen(input_image)
-        disc_real = disc(input_image, target_image)
-        disc_fake = disc(input_image, fake.detach())
+        fake = gen(low_res)
+        disc_real = disc(low_res, high_res)
+        disc_fake = disc(low_res, fake.detach())
         disc_loss_real = bce(
             disc_real, torch.ones_like(
                 disc_real) - 0.1 * torch.rand_like(disc_real)
@@ -37,22 +37,23 @@ def train_fn(loader, disc, gen, opt_gen, opt_disc, mse, bce, vgg_loss):
         opt_disc.step()
 
         # Train Generator: min log(1 - D(G(z))) <-> max log(D(G(z))
-        disc_fake = disc(input_image, fake)
+        disc_fake = disc(low_res, fake)
         #l2_loss = mse(fake, high_res)
         adversarial_loss = 1e-3 * bce(disc_fake, torch.ones_like(disc_fake))
-        loss_for_vgg = 0.006 * vgg_loss(fake, target_image)
+        loss_for_vgg = 0.006 * vgg_loss(fake, high_res)
         gen_loss = loss_for_vgg + adversarial_loss
 
         opt_gen.zero_grad()
         gen_loss.backward()
         opt_gen.step()
 
-        if idx % 100 == 0 and idx > 0:
-            split_image_crops("/Users/ma107/Desktop/crawl", gen)
+        # if idx % 200 == 0:
+        #     plot_examples("test_images/", gen)
 
 
 def main():
-    dataset = WaterDataset(root_dir="/Users/ma107/Downloads/wm-nowm")
+    # dataset = MyImageFolder(root_dir="new_data/")
+    dataset = WaterDataset(root_dir="C:\\Users\\gearinc\\Downloads\\archive\\wm-nowm")
     loader = DataLoader(
         dataset,
         batch_size=config.BATCH_SIZE,
@@ -90,4 +91,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try_model = False
+    if try_model: 
+        gen = Generator(in_channels=3).to(config.DEVICE)
+        opt_gen = optim.Adam(gen.parameters(), lr=config.LEARNING_RATE, betas=(0.5, 0.9))
+
+        load_checkpoint(config.CHECKPOINT_GEN, gen, opt_gen, config.LEARNING_RATE)
+        split_image_crops(config.VAL_DIR, gen)
+
+    else: 
+        main()

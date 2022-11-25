@@ -10,7 +10,7 @@ import albumentations as A
 from tqdm import tqdm 
 from albumentations.pytorch import ToTensorV2 
 
-def split_image_crops(directory, model, kernel_size=256, device='cpu'):
+def split_image_crops(directory, model, kernel_size=128, device='cpu'):
     model = model.to(device)
     model.eval()
 
@@ -25,7 +25,7 @@ def split_image_crops(directory, model, kernel_size=256, device='cpu'):
         augment = A.Compose([
             A.PadIfNeeded(min_width=max_size, min_height=max_size, border_mode=cv2.BORDER_REFLECT),
             A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5), max_pixel_value=255.0),
-            ToTensorV2
+            ToTensorV2(),
         ])
 
         image = augment(image=image)['image'].to(device)
@@ -46,19 +46,19 @@ def split_image_crops(directory, model, kernel_size=256, device='cpu'):
 
                 curr_patch = patches[from_idx:to_idx].to(device)
                 patch = model(curr_patch)
-                patches[from_idx:to_idx] = (patch*0.5 + 0.5).to("cpu") # avoid OOM
+                patches[from_idx:to_idx] = (patch*0.5 + 0.5).to(device) # avoid OOM
 
-                patches = patches.view(1, patches.shape[0], 3*kernel_size*kernel_size).permute(0,2,1)
-                output = F.fold(patches, output_size=(img_size, img_size), kernel_size=kernel_size, stride=dh)
-                recovery_mask = F.fold(torch.ones_like(patches), 
-                                    output_size=(img_size, img_size), kernel_size=kernel_size, stride=dh)
-                output/=recovery_mask
+        patches = patches.view(1, patches.shape[0], 3*kernel_size*kernel_size).permute(0,2,1)
+        output = F.fold(patches, output_size=(img_size, img_size), kernel_size=kernel_size, stride=dh)
+        recovery_mask = F.fold(torch.ones_like(patches), 
+                            output_size=(img_size, img_size), kernel_size=kernel_size, stride=dh)
+        output/=recovery_mask
 
-                augment_back = A.Compose([
-                    A.CenterCrop(height=max_size-int(pad_height), width=max_size-int(pad_width)),
-                    ToTensorV2
-                ])
-                x = augment_back(image = output.squeeze(0).detach().cpu().permute(1, 2, 0).numpy())['image']
-                save_image(x, f"saved/test_results_{idx}.png")
+        augment_back = A.Compose([
+            A.CenterCrop(height=max_size-int(pad_height), width=max_size-int(pad_width)),
+            ToTensorV2()
+        ])
+        x = augment_back(image = output.squeeze(0).detach().cpu().permute(1, 2, 0).numpy())['image']
+        save_image(x, f"C:\\Users\\gearinc\\Downloads\\pytorch-1\\pytorch-1\\saved\\test_results_{idx}.png")
     model.train()
 

@@ -1,14 +1,15 @@
 from turtle import forward
 import torch.nn as nn
 import torch
-import torchvision
-import config
+from torchvision.models import vgg19
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class VGG19(nn.Module):
     def __init__(self, requires_grad=False):
         super(VGG19, self).__init__()
-        vgg_pretrained_features = torchvision.models.VGG19(
+        vgg_pretrained_features = vgg19(
             pretrained=True).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
@@ -44,7 +45,7 @@ class VGG19(nn.Module):
 class VGGLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.vgg = VGG19().cuda()
+        self.vgg = VGG19().cpu()
         self.criterion = nn.L1Loss()
         self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]
 

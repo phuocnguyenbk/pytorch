@@ -7,10 +7,9 @@ class CNNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels, 3, stride, padding=1, bias=False, padding_mode="reflect"
-            ),
-            nn.InstanceNorm2d(out_channels, affine=True),
+            spectral_norm(nn.Conv2d(
+                in_channels, out_channels, 3, stride, 1, bias=False, padding_mode="reflect"
+            )),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -39,7 +38,7 @@ class Discriminator(nn.Module):
         in_channels = features[0]
         for idx, feature in enumerate(features[1:]):
             layers.append(CNNBlock(in_channels, feature,
-                          stride=1 if idx == len(features) - 2 else 2))
+                          stride=1 if idx == len(features) else 2))
             in_channels = feature
 
         layers.append(nn.Sequential(
@@ -57,11 +56,10 @@ class Discriminator(nn.Module):
 
 
 def test():
-    x = torch.randn((1, 3, 256, 256))
-    y = torch.randn((1, 3, 256, 256))
+    x = torch.randn((1, 3, 286, 286))
+    y = torch.randn((1, 3, 286, 286))
     model = Discriminator()
     preds = model(x, y)
-    print(model)
     print(preds.shape)
 
 
