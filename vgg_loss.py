@@ -1,14 +1,15 @@
 from turtle import forward
 import torch.nn as nn
 import torch
-import torchvision
-import config
+from torchvision.models import vgg19
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class VGG19(nn.Module):
     def __init__(self, requires_grad=False):
         super(VGG19, self).__init__()
-        vgg_pretrained_features = torchvision.models.VGG19(
+        vgg_pretrained_features = vgg19(
             pretrained=True).features
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
@@ -33,10 +34,10 @@ class VGG19(nn.Module):
 
     def forward(self, x):
         h_relu1 = self.slice1(x)
-        h_relu2 = self.slice1(h_relu1)
-        h_relu3 = self.slice1(h_relu2)
-        h_relu4 = self.slice1(h_relu3)
-        h_relu5 = self.slice1(h_relu4)
+        h_relu2 = self.slice2(h_relu1)
+        h_relu3 = self.slice3(h_relu2)
+        h_relu4 = self.slice4(h_relu3)
+        h_relu5 = self.slice5(h_relu4)
         out = [h_relu1, h_relu2, h_relu3, h_relu4, h_relu5]
         return out
 

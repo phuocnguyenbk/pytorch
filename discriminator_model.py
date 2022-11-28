@@ -49,19 +49,19 @@ class Discriminator(nn.Module):
 
         self.model = nn.Sequential(*layers)
 
-    def foward(self, x, y):
+    def forward(self, x, y):
         x = torch.cat([x, y], dim=1)
         x = self.initial(x)
         return self.model(x)
 
 
-# def test():
-#     x = torch.randn((1, 3, 256, 256))
-#     y = torch.randn((1, 3, 256, 256))
-#     model = Discriminator()
-#     preds = model(x, y)
-#     print(preds.shape)
+def test():
+    x = torch.randn((1, 3, 286, 286))
+    y = torch.randn((1, 3, 286, 286))
+    model = Discriminator()
+    preds = model(x, y)
+    print(preds.shape)
 
 
-# if __name__ == "__main__":
-#     test()
+if __name__ == "__main__":
+    test()
